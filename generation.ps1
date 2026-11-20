@@ -1,5 +1,4 @@
-﻿@'
-function New-Service {
+﻿function New-Service {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)][string]$Name,
@@ -66,6 +65,3 @@ else {
         else { Write-Warning "Invalid option '$sel' skipped." }
     }
 }
-'@ | Set-Content -Path .\generation.ps1 -Encoding UTF8
-
-.\generation.ps1
