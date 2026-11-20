@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://w3.org"
+           xmlns:tns="http://bustrack.com"
+           targetNamespace="http://bustrack.com"
+           elementFormDefault="qualified">
+
+    <!-- ==================== SHARED TYPES ==================== -->
+    <xs:simpleType name="PaymentStatus">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="AUTHORIZED"/>
+            <xs:enumeration value="REFUNDED"/>
+            <xs:enumeration value="DECLINED"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Fault detail element mapped via @SoapFault / SoapFaultMappingExceptionResolver -->
+    <xs:element name="PaymentFaultDetail">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="errorCode" type="xs:string"/>
+                <xs:element name="message" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== 1. AUTHORIZE PAYMENT ==================== -->
+    <xs:element name="AuthorizePaymentRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="cardNumber" type="xs:string"/>
+                <xs:element name="amount" type="xs:decimal"/>
+                <xs:element name="currency" type="xs:string"/>
+                <xs:element name="reference" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="AuthorizePaymentResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="paymentId" type="xs:string"/>
+                <xs:element name="reference" type="xs:string"/>
+                <xs:element name="status" type="tns:PaymentStatus"/>
+                <xs:element name="authorizedAt" type="xs:dateTime"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== 2. REFUND PAYMENT ==================== -->
+    <xs:element name="RefundPaymentRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="paymentId" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="RefundPaymentResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="paymentId" type="xs:string"/>
+                <xs:element name="status" type="tns:PaymentStatus"/>
+                <xs:element name="refundedAt" type="xs:dateTime"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== 3. GET PAYMENT STATUS ==================== -->
+    <xs:element name="GetPaymentStatusRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="paymentId" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="GetPaymentStatusResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="paymentId" type="xs:string"/>
+                <xs:element name="reference" type="xs:string"/>
+                <xs:element name="amount" type="xs:decimal"/>
+                <xs:element name="status" type="tns:PaymentStatus"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

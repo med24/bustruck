@@ -1,0 +1,376 @@
+openapi: 3.0.3
+info:
+  title: BusTrack Ticket Service API
+  version: 1.0.0
+  description: REST API for managing bus lines, purchasing tickets (via SOAP payment), and checking next bus ETA (via gRPC tracking).
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: API Gateway (Docker Compose)
+  - url: http://localhost:8081/api/v1
+    description: Direct Ticket Service
+
+paths:
+  /lines:
+    get:
+      summary: List all bus lines
+      tags: [Lines]
+      responses:
+        "200":
+          description: List of available bus lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LineResponse"
+    post:
+      summary: Create a new bus line (Admin)
+      tags: [Lines]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LineRequest"
+      responses:
+        "201":
+          description: Bus line created
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /lines/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: Get bus line details by ID
+      tags: [Lines]
+      responses:
+        "200":
+          description: Bus line details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update an existing bus line
+      tags: [Lines]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LineRequest"
+      responses:
+        "200":
+          description: Updated bus line
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a bus line
+      tags: [Lines]
+      responses:
+        "204":
+          description: Bus line deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /lines/{id}/next-bus:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: Get live position & ETA of the next bus on this line (gRPC call to tracking-service)
+      tags: [Lines]
+      responses:
+        "200":
+          description: Live position or graceful fallback response if tracking-service is degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NextBusResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tickets:
+    get:
+      summary: List tickets filtered by passenger name
+      tags: [Tickets]
+      parameters:
+        - name: passenger
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching tickets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TicketResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      summary: Purchase a ticket (calls payment-service via SOAP)
+      tags: [Tickets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseTicketRequest"
+      responses:
+        "201":
+          description: Ticket purchased and PAID
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResponse"
+        "202":
+          description: Payment service degraded/timeout — ticket saved as PENDING via Resilience4j fallback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Payment declined by bank (SOAP Fault) — ticket marked CANCELLED
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /tickets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get ticket by ID
+      tags: [Tickets]
+      responses:
+        "200":
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Validate (USED) or cancel (CANCELLED) a ticket
+      tags: [Tickets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTicketStatusRequest"
+      responses:
+        "200":
+          description: Updated ticket status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  schemas:
+    LineRequest:
+      type: object
+      required: [code, name, price]
+      properties:
+        code:
+          type: string
+          example: "L-10"
+        name:
+          type: string
+          example: "Tunis Marine - Marsa"
+        price:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 1.50
+
+    LineResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        code:
+          type: string
+          example: "L-10"
+        name:
+          type: string
+          example: "Tunis Marine - Marsa"
+        price:
+          type: number
+          format: double
+          example: 1.50
+
+    PurchaseTicketRequest:
+      type: object
+      required: [lineId, passenger, cardNumber]
+      properties:
+        lineId:
+          type: integer
+          format: int64
+          example: 1
+        passenger:
+          type: string
+          example: "Amine Ben Ali"
+        cardNumber:
+          type: string
+          example: "4111222233334444"
+
+    UpdateTicketStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [USED, CANCELLED]
+
+    TicketResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lineId:
+          type: integer
+          format: int64
+        passenger:
+          type: string
+        price:
+          type: number
+          format: double
+        status:
+          type: string
+          enum: [PENDING, PAID, CANCELLED, USED]
+        paymentId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    NextBusResponse:
+      type: object
+      properties:
+        lineCode:
+          type: string
+          example: "L-10"
+        available:
+          type: boolean
+          example: true
+        busId:
+          type: string
+          nullable: true
+          example: "BUS-104"
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          example: 36.8065
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          example: 10.1815
+        etaMinutes:
+          type: integer
+          nullable: true
+          example: 4
+        message:
+          type: string
+          example: "Live position retrieved"
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Invalid state transition or duplicate resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Downstream dependency unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

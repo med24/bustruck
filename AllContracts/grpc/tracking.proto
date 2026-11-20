@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package bustrack.tracking.v1;
+
+option java_multiple_files = true;
+option java_package = "com.bustrack.tracking.v1";
+option java_outer_classname = "TrackingProto";
+
+service TrackingService {
+  // Unary RPC: fetch current position & ETA for a specific bus
+  rpc GetLastPosition (BusRequest) returns (Position);
+
+  // Server-streaming RPC: subscribe to live position updates for all buses on a line
+  rpc StreamLinePositions (LineRequest) returns (stream Position);
+
+  // Client-streaming RPC: ingest a batch/stream of GPS pings from a bus simulator
+  rpc ReportPositions (stream Position) returns (Ack);
+}
+
+message BusRequest {
+  string bus_id = 1;
+}
+
+message LineRequest {
+  string line_code = 1;
+}
+
+message Position {
+  // Reserved field numbers/names to demonstrate safe protobuf evolution
+  reserved 9, 10;
+  reserved "legacy_driver_name";
+
+  string bus_id = 1;
+  string line_code = 2;
+  double latitude = 3;
+  double longitude = 4;
+  double speed_kmh = 5;
+  int32 eta_minutes = 6;
+  string next_stop = 7;
+  int64 timestamp_epoch_ms = 8;
+}
+
+message Ack {
+  int32 received_count = 1;
+  string message = 2;
+}
