@@ -37,6 +37,7 @@ The `generation.ps1` PowerShell script automates bootstrapping Spring Boot micro
 
 
 ### Contracts (**FlowDiagram**)
+> bus not included in this diagram 
 
 
 ```mermaid
@@ -69,4 +70,207 @@ flowchart TB
     Tracking -.->|"Source of Truth"| Proto
     Ticket -.->|"Client Stub Copy"| Proto
     Payment -.->|"Contract-First WSDL Generation"| SOAP
+```
+### Sequence Diagrams for more details
+#### ticketing
+```mermaid
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)<br/>[SOAP Client]
+    participant Pay as payment-service (:8083)<br/>[SOAP Server]
+
+    User->>GW: POST /api/v1/tickets (JSON)
+    GW->>Ticket: Forward POST /api/v1/tickets
+    Note over Ticket: 1. Save Ticket as PENDING
+    Note over Ticket: 2. Marshal Java DTO -> SOAP XML
+    Ticket->>Pay: POST http://payment-service:8083/ws (XML)
+    alt Payment Approved
+        Pay-->>Ticket: SOAP Response (APPROVED + paymentId)
+        Note over Ticket: 3. Update Ticket to PAID
+        Ticket-->>GW: 201 Created (JSON)
+        GW-->>User: 201 Created (JSON)
+    else Card Refused / Limit Exceeded
+        Pay-->>Ticket: SOAP Fault (Error Code + Message)
+        Note over Ticket: 3. Update Ticket to CANCELLED
+        Ticket-->>GW: 422 Unprocessable Entity (JSON)
+        GW-->>User: 422 Unprocessable Entity (JSON)
+    end
+
+
+```
+
+
+
+#### Browse Lines & Check Next Bus (REST → gRPC)
+```mermaid
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)
+    participant TDB as ticket-db (:5432)
+    participant Track as tracking-service (:9090)
+
+    User->>GW: GET /api/v1/lines
+    GW->>Ticket: Route /api/v1/lines (with X-Correlation-Id)
+    Ticket->>TDB: SELECT * FROM lines
+    TDB-->>Ticket: List<Line>
+    Ticket-->>GW: 200 OK (JSON Lines)
+    GW-->>User: 200 OK (JSON Lines)
+
+    User->>GW: GET /api/v1/lines/{id}/next-bus
+    GW->>Ticket: Route GET /api/v1/lines/{id}/next-bus
+    Note over Ticket: Attach gRPC deadline (2s)
+    Ticket->>Track: gRPC GetLastPosition / StreamLinePositions
+    Track-->>Ticket: Position (busId, lat, lon, speed)
+    Note over Ticket: Compute ETA
+    Ticket-->>GW: 200 OK (JSON NextBusDTO)
+    GW-->>User: 200 OK (JSON NextBusDTO)
+
+```
+
+
+
+
+#### Successfu Ticket Purchase (Rest --> SOAP)
+
+```mermaid
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)
+    participant TDB as ticket-db (:5432)
+    participant Pay as payment-service (:8083)
+    participant PDB as payment-db (:5432)
+
+    User->>GW: POST /api/v1/tickets (lineId, passenger, cardNumber)
+    GW->>Ticket: Forward POST /api/v1/tickets
+    Ticket->>TDB: INSERT Ticket (status = PENDING)
+    TDB-->>Ticket: ticketId
+    Note over Ticket: Marshal Java DTO to SOAP XML
+    Ticket->>Pay: SOAP AuthorizePayment (amount, cardNumber, ticketId)
+    Pay->>PDB: INSERT Payment (status = APPROVED)
+    PDB-->>Pay: paymentId
+    Pay-->>Ticket: SOAP AuthorizePaymentResponse (APPROVED, paymentId)
+    Ticket->>TDB: UPDATE Ticket SET status = PAID, paymentId = ...
+    TDB-->>Ticket: Updated Ticket
+    Ticket-->>GW: 201 Created + Location: /api/v1/tickets/{id}
+    GW-->>User: 201 Created (JSON TicketResponse)
+
+```
+
+
+
+
+#### Buisness Rejection -SOAP Fault
+
+
+```mermaid
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)
+    participant TDB as ticket-db (:5432)
+    participant Pay as payment-service (:8083)
+
+    User->>GW: POST /api/v1/tickets (refused test card)
+    GW->>Ticket: Forward POST /api/v1/tickets
+    Ticket->>TDB: INSERT Ticket (status = PENDING)
+    Ticket->>Pay: SOAP AuthorizePayment (refused card)
+    Note over Pay: Bank validation fails
+    Pay-->>Ticket: SOAP Fault (Code: CARD_DECLINED, Msg: Insufficient funds)
+    Note over Ticket: Catch SoapFaultClientException
+    Ticket->>TDB: UPDATE Ticket SET status = CANCELLED
+    Ticket-->>GW: 422 Unprocessable Entity (JSON ErrorDTO)
+    GW-->>User: 422 Unprocessable Entity (Clear error message)
+
+```
+
+
+
+
+#### Payment Timeout, Retry & Circuit Breaker Fallback
+
+
+```mermaid
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)<br/>[Resilience4j]
+    participant TDB as ticket-db (:5432)
+    participant Pay as payment-service (:8083)
+
+    User->>GW: POST /api/v1/tickets
+    GW->>Ticket: Forward POST /api/v1/tickets
+    Ticket->>TDB: INSERT Ticket (status = PENDING)
+
+    loop Retry with Exponential Backoff (e.g., 3 attempts)
+        Ticket->>Pay: SOAP AuthorizePayment
+        Pay--xTicket: SocketTimeoutException / ConnectionRefused
+    end
+
+    Note over Ticket: Failure threshold reached -> Circuit Breaker OPENS
+    Note over Ticket: Invoke fallbackAuthorizePayment()
+    Ticket-->>GW: 503 Service Unavailable (Ticket kept PENDING, retry later)
+    GW-->>User: 503 Service Unavailable (JSON Fallback Response)
+
+```
+
+
+
+####  Tracking Service Down — Graceful Degradation
+
+```mermaid 
+sequenceDiagram
+    actor User as External Client
+    participant GW as api-gateway (:8080)
+    participant Ticket as ticket-service (:8081)<br/>[Resilience4j]
+    participant Track as tracking-service (:9090)
+    participant Pay as payment-service (:8083)
+
+    User->>GW: GET /api/v1/lines/{id}/next-bus
+    GW->>Ticket: Forward request
+    Ticket->>Track: gRPC GetLastPosition (with deadline)
+    Track--xTicket: StatusRuntimeException: UNAVAILABLE
+    Note over Ticket: Invoke fallbackNextBus()
+    Ticket-->>GW: 200 OK / 503 (Degraded: "Real-time position unavailable")
+    GW-->>User: Degraded JSON response
+
+    Note over User,Pay: Meanwhile, ticket purchases remain 100% operational
+    User->>GW: POST /api/v1/tickets
+    GW->>Ticket: Forward purchase request
+    Ticket->>Pay: SOAP AuthorizePayment
+    Pay-->>Ticket: SOAP Response (APPROVED)
+    Ticket-->>GW: 201 Created (PAID)
+    GW-->>User: 201 Created (PAID)
+
+```
+
+
+#### Bus GPS Telemetry & Live Streaming
+
+
+```mermaid
+sequenceDiagram
+    participant Sim as Position Simulator<br/>(or grpcurl Client)
+    participant Track as tracking-service (:9090)<br/>[@GrpcService]
+    participant TrDB as tracking-db (:5432)
+
+    rect rgb(235, 245, 255)
+        Note over Sim,TrDB: Client-Streaming / Simulator Ingestion
+        Sim->>Track: stream Position (busId, lineCode, lat, lon, timestamp)
+        Track->>TrDB: UPSERT Bus lastPosition & INSERT history
+        Track-->>Sim: Ack (receivedCount)
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Sim,TrDB: Server-Streaming Subscription
+        Sim->>Track: StreamLinePositions(LineRequest: lineCode="L10")
+        loop Every N seconds while stream active
+            Track->>TrDB: SELECT latest positions for line L10
+            TrDB-->>Track: List<Position>
+            Track-->>Sim: stream Position update
+        end
+    end
+
 ```
