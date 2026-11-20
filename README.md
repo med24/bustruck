@@ -34,3 +34,39 @@ The `generation.ps1` PowerShell script automates bootstrapping Spring Boot micro
 ### Post-Generation Notes
 * **Protocol Contracts:** After generating the base Spring Boot folders, place your gRPC (`tracking.proto`) and SOAP (`payment.xsd`) contract files into their respective `src/main/` paths or sync them from the `contracts/` directory.
 * **Containerization:** Add the service-specific `Dockerfile` to each generated root directory before running `docker-compose up`.
+
+
+### Contracts (**FlowDiagram**)
+
+
+```mermaid
+flowchart TB
+    Client(["External Client<br/>(Mobile App / Web / Postman)"])
+
+    subgraph GatewayLayer["Entry Point"]
+        GW["api-gateway<br/>(Port 8080)"]
+    end
+
+    subgraph CoreServices["BusTrack Microservices"]
+        Ticket["ticket-service<br/>(REST Server + SOAP/gRPC Client)<br/>Port 8081"]
+        Tracking["tracking-service<br/>(gRPC Server)<br/>Port 9090 (gRPC) / 8082 (Actuator)"]
+        Payment["payment-service<br/>(SOAP Server)<br/>Port 8083"]
+    end
+
+    subgraph Contracts["Published Contracts (/contracts)"]
+        OpenAPI["📄 OpenAPI 3.0<br/>contracts/openapi/ticket-service.yaml<br/>──────────────────────────<br/>• Defines REST endpoints (/api/v1/lines, /tickets)<br/>• Validates JSON request/response DTOs<br/>• Generates Swagger UI documentation"]
+        Proto["⚡ Protocol Buffers (gRPC)<br/>contracts/proto/tracking.proto<br/>──────────────────────────<br/>• Binary low-latency GPS telemetry<br/>• Unary: GetLastPosition<br/>• Server Stream: StreamLinePositions<br/>• Client Stream: ReportPositions"]
+        SOAP["🧾 XSD / WSDL (SOAP)<br/>contracts/soap/payment.xsd & .wsdl<br/>──────────────────────────<br/>• Strict XML schema for financial transactions<br/>• Operations: Authorize, Refund, GetStatus<br/>• Typed SOAP Faults for declined cards"]
+    end
+
+    Client -->|"HTTP / JSON"| GW
+    GW -->|"Routes /api/v1/**"| Ticket
+
+    Ticket -.->|"Implements & Serves"| OpenAPI
+    Ticket -->|"gRPC (HTTP/2 + Protobuf)<br/>With Deadline & Fallback"| Tracking
+    Ticket -->|"SOAP (HTTP + XML)<br/>With Retry & Circuit Breaker"| Payment
+
+    Tracking -.->|"Source of Truth"| Proto
+    Ticket -.->|"Client Stub Copy"| Proto
+    Payment -.->|"Contract-First WSDL Generation"| SOAP
+```
