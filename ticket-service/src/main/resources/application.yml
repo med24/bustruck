@@ -1,0 +1,68 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ticket-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/ticketdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bustrack}
+    password: ${SPRING_DATASOURCE_PASSWORD:bustrack}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+bustrack:
+  payment:
+    uri: ${PAYMENT_SERVICE_URI:http://localhost:8083/ws}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
+  tracking:
+    deadline-ms: 2000
+
+grpc:
+  client:
+    tracking:
+      address: ${TRACKING_GRPC_ADDRESS:static://localhost:9090}
+      negotiation-type: plaintext
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - com.bustrack.ticket.exception.PaymentRejectedException   # business refusal is not a failure
+      tracking:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 15s
+  retry:
+    instances:
+      payment:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:                                           # technical errors only
+          - org.springframework.ws.client.WebServiceIOException
+          - org.springframework.ws.client.WebServiceTransportException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

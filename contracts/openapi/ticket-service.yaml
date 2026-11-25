@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: BusTrack - ticket-service
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: via api-gateway
+paths:
+  /api/v1/lines:
+    get:
+      summary: List lines and fares
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Line'}}}}}
+    post:
+      summary: Create a line
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LineRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Line'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/v1/lines/{id}:
+    get:
+      summary: Get a line
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Line'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/lines/{id}/next-bus:
+    get:
+      summary: Position and ETA of the next bus (REST -> gRPC). Degraded response if tracking-service is down.
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200': {description: OK (realTime=false when degraded), content: {application/json: {schema: {$ref: '#/components/schemas/NextBus'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/tickets:
+    post:
+      summary: Buy a ticket (REST -> SOAP payment authorization)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateTicket'}}}
+      responses:
+        '201': {description: Created (PAID), content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {description: Payment refused (SOAP Fault), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: Payment service unavailable - ticket kept PENDING, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /api/v1/tickets/{id}:
+    get:
+      summary: Get a ticket
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/tickets/{id}/validate:
+    post:
+      summary: Validate (consume) a PAID ticket
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200': {description: Validated, content: {application/json: {schema: {$ref: '#/components/schemas/Ticket'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {description: Ticket not in PAID state, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+components:
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+  responses:
+    Error: {description: Error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    LineRequest:
+      type: object
+      required: [code, name, price, stopLatitude, stopLongitude]
+      properties:
+        code: {type: string, example: L30}
+        name: {type: string}
+        price: {type: number, example: 2.5}
+        stopLatitude: {type: number, format: double}
+        stopLongitude: {type: number, format: double}
+    Line:
+      allOf:
+        - $ref: '#/components/schemas/LineRequest'
+        - type: object
+          properties: {id: {type: integer, format: int64}}
+    CreateTicket:
+      type: object
+      required: [lineId, passengerName, cardNumber]
+      properties:
+        lineId: {type: integer, format: int64}
+        passengerName: {type: string}
+        cardNumber: {type: string, example: '4111111111111111', description: 'Ending in 0002 = declined (test card)'}
+    Ticket:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        lineId: {type: integer, format: int64}
+        passengerName: {type: string}
+        price: {type: number}
+        status: {type: string, enum: [PENDING, PAID, CANCELLED, USED]}
+        paymentId: {type: integer, format: int64, nullable: true}
+        createdAt: {type: string, format: date-time}
+        validatedAt: {type: string, format: date-time, nullable: true}
+    NextBus:
+      type: object
+      properties:
+        lineId: {type: integer, format: int64}
+        lineCode: {type: string}
+        realTime: {type: boolean}
+        busId: {type: string, nullable: true}
+        latitude: {type: number, nullable: true}
+        longitude: {type: number, nullable: true}
+        speedKmh: {type: number, nullable: true}
+        etaSeconds: {type: integer, format: int64, nullable: true}
+        message: {type: string, nullable: true}
+    Error:
+      type: object
+      properties:
+        code: {type: string}
+        message: {type: string}
+        timestamp: {type: string, format: date-time}
+        ticketId: {type: integer, format: int64}
+        ticketStatus: {type: string}

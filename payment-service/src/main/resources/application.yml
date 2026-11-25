@@ -1,0 +1,22 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5435/paymentdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bustrack}
+    password: ${SPRING_DATASOURCE_PASSWORD:bustrack}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  webservices:
+    path: /ws
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

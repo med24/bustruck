@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://bustrack.com/payment"
+           targetNamespace="http://bustrack.com/payment"
+           elementFormDefault="qualified">
+
+  <xs:element name="AuthorizePaymentRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="ticketId" type="xs:long"/>
+        <xs:element name="amount" type="xs:decimal"/>
+        <xs:element name="cardNumber" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="AuthorizePaymentResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="paymentId" type="xs:long"/>
+        <xs:element name="status" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="RefundPaymentRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="paymentId" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="RefundPaymentResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="paymentId" type="xs:long"/>
+        <xs:element name="status" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetPaymentStatusRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="paymentId" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetPaymentStatusResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="paymentId" type="xs:long"/>
+        <xs:element name="ticketId" type="xs:long"/>
+        <xs:element name="amount" type="xs:decimal"/>
+        <xs:element name="status" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

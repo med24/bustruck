@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package bustrack.tracking.v1;
+
+option java_multiple_files = true;
+option java_package = "com.bustrack.tracking.grpc";
+option java_outer_classname = "TrackingProto";
+
+service TrackingService {
+  // Unary: last known position of one bus
+  rpc GetLastPosition(BusRequest) returns (Position);
+  // Unary: most recent position reported on a line (used by ticket-service for next-bus)
+  rpc GetLineLastPosition(LineRequest) returns (Position);
+  // Server streaming: live positions of all buses of a line
+  rpc StreamLinePositions(LineRequest) returns (stream Position);
+  // Client streaming: buses / simulator push their GPS positions
+  rpc ReportPositions(stream Position) returns (ReportAck);
+}
+
+message BusRequest  { string bus_id = 1; }
+message LineRequest { string line_code = 1; }
+
+message Position {
+  string bus_id = 1;
+  string line_code = 2;
+  double latitude = 3;
+  double longitude = 4;
+  double speed_kmh = 5;
+  int64  timestamp_epoch_ms = 6;
+}
+
+message ReportAck { int64 received_count = 1; }

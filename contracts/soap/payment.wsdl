@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reference copy. The running payment-service also publishes a generated WSDL at /ws/payment.wsdl -->
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                  xmlns:tns="http://bustrack.com/payment"
+                  targetNamespace="http://bustrack.com/payment">
+  <wsdl:types>
+    <xs:schema targetNamespace="http://bustrack.com/payment" elementFormDefault="qualified">
+      <xs:include schemaLocation="payment.xsd"/>
+    </xs:schema>
+  </wsdl:types>
+
+  <wsdl:message name="AuthorizePaymentRequest"><wsdl:part name="parameters" element="tns:AuthorizePaymentRequest"/></wsdl:message>
+  <wsdl:message name="AuthorizePaymentResponse"><wsdl:part name="parameters" element="tns:AuthorizePaymentResponse"/></wsdl:message>
+  <wsdl:message name="RefundPaymentRequest"><wsdl:part name="parameters" element="tns:RefundPaymentRequest"/></wsdl:message>
+  <wsdl:message name="RefundPaymentResponse"><wsdl:part name="parameters" element="tns:RefundPaymentResponse"/></wsdl:message>
+  <wsdl:message name="GetPaymentStatusRequest"><wsdl:part name="parameters" element="tns:GetPaymentStatusRequest"/></wsdl:message>
+  <wsdl:message name="GetPaymentStatusResponse"><wsdl:part name="parameters" element="tns:GetPaymentStatusResponse"/></wsdl:message>
+
+  <wsdl:portType name="PaymentPort">
+    <wsdl:operation name="AuthorizePayment">
+      <wsdl:input message="tns:AuthorizePaymentRequest"/>
+      <wsdl:output message="tns:AuthorizePaymentResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="RefundPayment">
+      <wsdl:input message="tns:RefundPaymentRequest"/>
+      <wsdl:output message="tns:RefundPaymentResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetPaymentStatus">
+      <wsdl:input message="tns:GetPaymentStatusRequest"/>
+      <wsdl:output message="tns:GetPaymentStatusResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="PaymentPortSoap11" type="tns:PaymentPort">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="AuthorizePayment">
+      <soap:operation soapAction=""/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="RefundPayment">
+      <soap:operation soapAction=""/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetPaymentStatus">
+      <soap:operation soapAction=""/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+
+  <wsdl:service name="PaymentService">
+    <wsdl:port name="PaymentPortSoap11" binding="tns:PaymentPortSoap11">
+      <soap:address location="http://localhost:8083/ws"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

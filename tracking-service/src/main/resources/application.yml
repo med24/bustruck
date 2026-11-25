@@ -1,0 +1,31 @@
+server:
+  port: 8082            # actuator only
+
+spring:
+  application:
+    name: tracking-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/trackingdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bustrack}
+    password: ${SPRING_DATASOURCE_PASSWORD:bustrack}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+grpc:
+  server:
+    port: 9090
+
+tracking:
+  stream:
+    interval-seconds: 2       # push period of StreamLinePositions
+  simulator:
+    enabled: ${TRACKING_SIMULATOR_ENABLED:true}   # fake buses moving along 2 lines
+    interval-ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

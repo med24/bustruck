@@ -1,0 +1,102 @@
+# BusTrack - one container per service, dedicated network (DNS-based discovery by service name)
+services:
+
+  # ---------- databases (one per service) ----------
+  ticket-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ticketdb
+      POSTGRES_USER: bustrack
+      POSTGRES_PASSWORD: bustrack
+    volumes: [ticket-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bustrack -d ticketdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [bustrack-net]
+
+  tracking-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: trackingdb
+      POSTGRES_USER: bustrack
+      POSTGRES_PASSWORD: bustrack
+    volumes: [tracking-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bustrack -d trackingdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [bustrack-net]
+
+  payment-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: paymentdb
+      POSTGRES_USER: bustrack
+      POSTGRES_PASSWORD: bustrack
+    volumes: [payment-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bustrack -d paymentdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [bustrack-net]
+
+  # ---------- microservices ----------
+  payment-service:
+    build: ./payment-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://payment-db:5432/paymentdb
+      SPRING_DATASOURCE_USERNAME: bustrack
+      SPRING_DATASOURCE_PASSWORD: bustrack
+    depends_on:
+      payment-db: {condition: service_healthy}
+    ports: ["8083:8083"]          # SOAP /ws  (WSDL: /ws/payment.wsdl)
+    networks: [bustrack-net]
+
+  tracking-service:
+    build: ./tracking-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tracking-db:5432/trackingdb
+      SPRING_DATASOURCE_USERNAME: bustrack
+      SPRING_DATASOURCE_PASSWORD: bustrack
+      TRACKING_SIMULATOR_ENABLED: "true"
+    depends_on:
+      tracking-db: {condition: service_healthy}
+    ports: ["9090:9090", "8082:8082"]   # gRPC / actuator
+    networks: [bustrack-net]
+
+  ticket-service:
+    build: ./ticket-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://ticket-db:5432/ticketdb
+      SPRING_DATASOURCE_USERNAME: bustrack
+      SPRING_DATASOURCE_PASSWORD: bustrack
+      PAYMENT_SERVICE_URI: http://payment-service:8083/ws
+      TRACKING_GRPC_ADDRESS: static://tracking-service:9090
+    depends_on:
+      ticket-db: {condition: service_healthy}
+      payment-service: {condition: service_started}   # started, not required: ticket-service degrades if they are down
+      tracking-service: {condition: service_started}
+    ports: ["8081:8081"]
+    networks: [bustrack-net]
+
+  api-gateway:
+    build: ./api-gateway
+    environment:
+      TICKET_SERVICE_URL: http://ticket-service:8081
+    depends_on:
+      ticket-service: {condition: service_started}
+    ports: ["8080:8080"]          # the only public entry point for clients
+    networks: [bustrack-net]
+
+networks:
+  bustrack-net:
+    driver: bridge
+
+volumes:
+  ticket-data:
+  tracking-data:
+  payment-data:
